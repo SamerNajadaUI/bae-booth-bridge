@@ -24,6 +24,7 @@ def say(pct, text):
 def main():
     import bpy
     import build_booth as B
+    import live as L
 
     job = json.load(open(os.path.join(JOB, "job.json")))
     spec, opt = job["spec"], job.get("options") or {}
@@ -34,8 +35,13 @@ def main():
 
     say(2, "Building the booth")
     t0 = time.time()
-    sc = B.build(spec, os.path.join(JOB, "files"))
-    cams = B.make_cameras(sc, spec)
+    # the same assembler as the Live mode, so the render is exactly what was seen live
+    sc = B.reset()
+    L.setup(sc)
+    built = L.assemble(sc, spec, os.path.join(JOB, "files"))
+    for f in built.get("failed", []):
+        print("skipped:", f, flush=True)
+    cams = {o["bae_cam"]: o for o in sc.objects if o.get("bae_cam")}
     W, H = int(opt.get("width", 1920)), int(opt.get("height", 1080))
     B.setup_render(sc, W, H, int(opt.get("samples", 64)))
     device = B.use_gpu(sc)
@@ -75,7 +81,10 @@ def main():
 
 try:
     main()
-except Exception:
+except Exception as e:
     traceback.print_exc()
-    sys.stdout.flush()
+    # one clear line first, so the studio shows the real reason and not the warnings before it
+    tb = traceback.extract_tb(e.__traceback__)
+    where = f"{os.path.basename(tb[-1].filename)} line {tb[-1].lineno}" if tb else ""
+    print(f"@@ERROR {type(e).__name__}: {e} ({where})", flush=True)
     sys.exit(3)
